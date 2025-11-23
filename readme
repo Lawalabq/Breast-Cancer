@@ -1,0 +1,1 @@
+It seems like the json file hold annotoations to form lines which enclose region im just using the points first and ill let cv2 handle the rest
