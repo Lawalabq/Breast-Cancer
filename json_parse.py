@@ -27,29 +27,25 @@ def get_dicom(dicom_id,dicom_view,dicom_laterilty):
                    }
     for filename in glob.glob(patient_dict[dicom_id]+"\\*.dcm"): # Loop through all DICOM files in the directory
 
-        print(f"Checking DICOM file: {filename}")
+        
         ds = pydicom.dcmread(filename)
         if ds.get("ViewPosition") == dicom_view and ds.get("ImageLaterality") == dicom_laterilty:
             print(f"Matched DICOM file: {filename}")
             return ds
 
 
-def create_mask(dicom_path, annotation_data):
+
+def create_mask(dicom_image, annotation_data):
     """
     Reads a DICOM and an annotation object, returns the Image and the Binary Mask.
     """
     
     # A. Read the DICOM file
     # If you don't have the real file yet, we can create a dummy image for testing
-    try:
-        ds = pydicom.dcmread(dicom_path)
-        image_data = ds.pixel_array
-        height, width = image_data.shape
-    except:
-        print("DICOM file not found. Creating a blank dummy image for demonstration.")
-        height, width = 500, 500 # Assuming typical size
-        image_data = np.zeros((height, width), dtype=np.uint8)
 
+    ds = dicom_image
+    image_data = ds.pixel_array
+    height, width = image_data.shape
     # B. Create an empty black mask (same size as image)
     mask = np.zeros((height, width), dtype=np.uint8)
 
@@ -69,7 +65,6 @@ def create_mask(dicom_path, annotation_data):
         cv2.fillPoly(mask, roi_array, 255)
 
     return image_data, mask
-
 
 def overlay_mask_on_image(image, mask, alpha=0.4, ax=None, show=True):
     """
@@ -114,52 +109,59 @@ def overlay_mask_on_image(image, mask, alpha=0.4, ax=None, show=True):
 
 
 
-#Change directory to annotation dataset path
-dataset_path = "C:\\Users\\alqud\\Desktop\\2025\\Breast Cancer\\dataset-uta7-annotations\\dataset" 
-os.chdir(dataset_path)
-for json_file in glob.glob("*.json"): # Loop through all JSON files in the directory
-    dataset_path = "C:\\Users\\alqud\\Desktop\\2025\\Breast Cancer\\dataset-uta7-annotations\\dataset" 
-    os.chdir(dataset_path)
-    if json_file not in ["b191c30e-db18-4d25-b156-6b6bc2dda995.json","6244f5c5-faf5-4e52-83e6-74fee6476dec.json","829de0c1-5e7a-4b9a-978a-537922a46b35.json"]:
-        continue
-    print(f"Loading annotations from: {json_file}")
-    with open(json_file, 'r') as f:
-        json_data = json.load(f)
+def get_dataset():
 
-        json_stacks= json_data.get("rawData", {}).get("stacks", [])
-        for stack in json_stacks:
-            if  "freehand" in stack.keys():
-                annotations = "freehand" if "freehand" in stack.keys() else "probe"
-                if stack.get("seriesDescription") != "MG":
+            dataset_path = "C:\\Users\\alqud\\Desktop\\2025\\Breast Cancer\\dataset-uta7-annotations\\dataset" 
+            os.chdir(dataset_path)
+            output_dict= {}
+            for json_file in glob.glob("*.json"): # Loop through all JSON files in the directory
+                dataset_path = "C:\\Users\\alqud\\Desktop\\2025\\Breast Cancer\\dataset-uta7-annotations\\dataset" 
+                os.chdir(dataset_path)
+                if json_file not in ["b191c30e-db18-4d25-b156-6b6bc2dda995.json","6244f5c5-faf5-4e52-83e6-74fee6476dec.json","829de0c1-5e7a-4b9a-978a-537922a46b35.json"]:
                     continue
-                view_position= stack.get("viewPosition")
-                laterality= stack.get("imageSide")
-                print(stack)
-                handles =stack.get(annotations, {})[0].get("handles")
-                coordinates= []
-                for handle in handles:
-                    coordinates.append(get_coordinates(handle))
-                dicom_ds= get_dicom(json_data.get("rawData", {}).get("studyId"),view_position,laterality)
-                image_data, mask=create_mask(dicom_ds,coordinates)
-                overlay_mask_on_image(image_data,mask)
+                print(f"Loading annotations from: {json_file}")
+                
+                with open(json_file, 'r') as f:
+                    json_data = json.load(f)
 
-            elif "probe" in stack.keys():
-                annotations = "probe" 
-                if stack.get("seriesDescription") != "MG":
-                    continue
-                view_position= stack.get("viewPosition")
-                laterality= stack.get("imageSide")
-                probe = stack.get("probe")
-                print(stack)
-                coordinates= []
-                for handle in handles:
-                    coordinates.append(get_coordinates(handle))
-                dicom_ds= get_dicom(json_data.get("rawData", {}).get("studyId"),view_position,laterality)
-                image_data, mask=create_mask(dicom_ds,coordinates)
-                # overlay_mask_on_image(image_data,mask)
-                
-                
-                #     print(f"Coordinates: {coords}")
+                    json_stacks= json_data.get("rawData", {}).get("stacks", [])
+                    for stack in json_stacks:
+                        if  "freehand" in stack.keys():
+                            annotations = "freehand" if "freehand" in stack.keys() else "probe"
+                            if stack.get("seriesDescription") != "MG":
+                                continue
+                            view_position= stack.get("viewPosition")
+                            laterality= stack.get("imageSide")
+                            handles =stack.get(annotations, {})[0].get("handles")
+                            coordinates= []
+                            for handle in handles:
+                                coordinates.append(get_coordinates(handle))
+                            image_string= json_data.get("rawData", {}).get("studyId") + "_" + view_position + "_" + laterality
+                            
+                            dicom_ds= get_dicom(json_data.get("rawData", {}).get("studyId"),view_position,laterality)
+                            image_data, mask=create_mask(dicom_ds,coordinates)
+                            output_dict[image_string+"_image"]= image_data
+                            output_dict[image_string+"_mask"]= mask
+                            
+
+                        elif "probe" in stack.keys():
+                            annotations = "probe" 
+                            if stack.get("seriesDescription") != "MG":
+                                continue
+                            view_position= stack.get("viewPosition")
+                            laterality= stack.get("imageSide")
+                            coordinates= []
+                            for handle in handles:
+                                coordinates.append(get_coordinates(handle))
+                            dicom_ds= get_dicom(json_data.get("rawData", {}).get("studyId"),view_position,laterality)
+                            image_data, mask=create_mask(dicom_ds,coordinates)
+                            image_string= json_data.get("rawData", {}).get("studyId") + "_" + view_position + "_" + laterality
+                            output_dict[image_string+"_image"]= image_data
+                            output_dict[image_string+"_mask"]= mask
             
-            
+            return output_dict
+                            
+                        #     print(f"Coordinates: {coords}")
+                    
+dict=get_dataset()
    
